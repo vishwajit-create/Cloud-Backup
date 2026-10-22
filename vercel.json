@@ -5,7 +5,7 @@
       "destination": "/api/index.js"
     },
     {
-      "source": "/((?!css|js|favicon|assets).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
