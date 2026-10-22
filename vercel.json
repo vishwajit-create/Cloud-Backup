@@ -5,8 +5,8 @@
       "destination": "/api/index.js"
     },
     {
-      "source": "/:path*",
-      "destination": "/public/:path*"
+      "source": "/((?!css|js|favicon|assets).*)",
+      "destination": "/index.html"
     }
   ]
 }
