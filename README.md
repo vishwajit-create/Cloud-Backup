@@ -50,10 +50,25 @@ EMAIL_FROM="CloudVault Security" <your_email@gmail.com>
 
 ---
 
-## 🚀 Running the App
+## 🚀 Running Locally
 
 ```bash
 cd file-backup-app
 npm start
 ```
 Open **[http://localhost:3000](http://localhost:3000)** in your browser.
+
+---
+
+## ⚡ Deploying to Vercel
+
+1. Push your repository to GitHub (or use [https://github.com/vishwajit-create/Cloud-Backup](https://github.com/vishwajit-create/Cloud-Backup)).
+2. Log in to [Vercel](https://vercel.com) and click **"Add New..."** -> **"Project"**.
+3. Import the `Cloud-Backup` repository.
+4. Keep the Framework Preset as **Other** (Vercel automatically detects `vercel.json`).
+5. In **Environment Variables**, add:
+   - `REDIS_URL`: `rediss://default:YOUR_PASSWORD@valkey-38ec22fb-innocentyadav100-c4e4.j.aivencloud.com:21513`
+   - `TEXTBEE_API_KEY`: *(Your TextBee API Key)*
+   - `GOOGLE_MAIL_USER`: *(Your Gmail Address)*
+   - `GOOGLE_MAIL_APP_PASS`: *(Your 16-char Google App Password)*
+6. Click **Deploy**! Your site is live on your `.vercel.app` URL.

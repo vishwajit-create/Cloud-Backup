@@ -61,9 +61,13 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`\n======================================================`);
-  console.log(`🚀 File Backup App running at http://localhost:${PORT}`);
-  console.log(`📦 Database: Valkey Cloud (TLS Rediss) connected`);
-  console.log(`======================================================\n`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`\n======================================================`);
+    console.log(`🚀 File Backup App running at http://localhost:${PORT}`);
+    console.log(`📦 Database: Valkey Cloud (TLS Rediss) connected`);
+    console.log(`======================================================\n`);
+  });
+}
+
+module.exports = app;
