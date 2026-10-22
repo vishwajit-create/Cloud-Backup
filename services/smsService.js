@@ -13,14 +13,45 @@ require('dotenv').config();
 
 /**
  * Formats phone number into E.164 standard (e.g., +919876543210)
+ * Handles all common Indian input formats:
+ *   "+91 98765 43210"  → +919876543210
+ *   "+919876543210"    → +919876543210
+ *   "919876543210"     → +919876543210
+ *   "09876543210"      → +919876543210  (leading 0 stripped, +91 added)
+ *   "9876543210"       → +919876543210  (10-digit → +91 prepended)
  */
 function formatE164(phone) {
   if (!phone) return '';
+
+  // Strip everything except digits and leading +
   let cleaned = phone.replace(/[^\d+]/g, '');
-  if (!cleaned.startsWith('+')) {
-    cleaned = '+' + cleaned;
+
+  // If it already has a + prefix, keep it as-is (trust the user)
+  if (cleaned.startsWith('+')) {
+    return cleaned;
   }
-  return cleaned;
+
+  // Strip leading 00 (international dialling prefix, e.g. "0091...")
+  if (cleaned.startsWith('00')) {
+    cleaned = cleaned.slice(2);
+  }
+  // Strip leading 0 (e.g. "09876543210" → "9876543210")
+  else if (cleaned.startsWith('0')) {
+    cleaned = cleaned.slice(1);
+  }
+
+  // If it starts with 91 and is 12 digits (country code already present)
+  if (cleaned.startsWith('91') && cleaned.length === 12) {
+    return '+' + cleaned;
+  }
+
+  // 10-digit bare Indian number → prepend +91
+  if (cleaned.length === 10) {
+    return '+91' + cleaned;
+  }
+
+  // Anything else → just prepend + and let TextBee validate
+  return '+' + cleaned;
 }
 
 /**
@@ -45,18 +76,6 @@ async function sendSmsOtp(mobileNumber, otp) {
       previewMode: true,
       otpCode:     otp,
       message:     `[Dev Mode] Set TEXTBEE_API_KEY in Vercel env vars to send real SMS. OTP: ${otp}`
-    };
-  }
-
-  // ─── PHONE FORMAT VALIDATION ─────────────────────────────────────────────────
-  const digitsOnly = formattedPhone.replace(/\D/g, '');
-  if (digitsOnly.length < 7 || digitsOnly.length > 15) {
-    console.error(`[TextBee] ❌ Invalid phone number: "${mobileNumber}" → formatted: "${formattedPhone}"`);
-    return {
-      success:     true,  // still true so user sees OTP on screen
-      previewMode: true,
-      otpCode:     otp,
-      message:     `Invalid phone format "${mobileNumber}". Please use E.164 e.g. +919876543210. OTP: ${otp}`
     };
   }
 
