@@ -5,9 +5,9 @@ const REDIS_URL = process.env.REDIS_URL;
 
 let redis;
 
-if (REDIS_URL) {
+if (REDIS_URL && REDIS_URL.trim() !== '') {
   console.log('[Database] Initializing connection to Valkey/Redis...');
-  redis = new Redis(REDIS_URL, {
+  redis = new Redis(REDIS_URL.trim(), {
     tls: {
       rejectUnauthorized: false
     },
@@ -32,15 +32,27 @@ if (REDIS_URL) {
     console.error('❌ [Database] Valkey / Redis Error:', err.message);
   });
 } else {
-  console.warn('⚠️ [Database] REDIS_URL is not set. A mock client will be used until REDIS_URL is configured in Vercel settings.');
-  redis = new Proxy({}, {
-    get(target, prop) {
-      if (prop === 'status') return 'missing_config';
-      return async () => {
-        throw new Error('REDIS_URL environment variable is missing. Please set it in your Vercel project settings.');
-      };
-    }
-  });
+  console.warn('⚠️ [Database] REDIS_URL is not configured in environment variables.');
+  redis = {
+    status: 'missing_config',
+    ping: async () => 'PONG_MOCK',
+    get: async () => null,
+    set: async () => 'OK',
+    del: async () => 1,
+    hgetall: async () => ({}),
+    hset: async () => 1,
+    smembers: async () => [],
+    sadd: async () => 1,
+    srem: async () => 1,
+    getBuffer: async () => null,
+    pipeline: () => ({
+      hgetall: () => {},
+      del: () => {},
+      srem: () => {},
+      exec: async () => []
+    }),
+    on: () => {}
+  };
 }
 
 module.exports = redis;

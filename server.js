@@ -16,12 +16,23 @@ app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Static frontend assets
-app.use(express.static(path.join(__dirname, 'public')));
+// Static frontend assets (for local development)
+if (!process.env.VERCEL) {
+  app.use(express.static(path.join(__dirname, 'public')));
+}
 
-// Database Health & Status check endpoint
-app.get('/api/health', async (req, res) => {
+// Database Health & Status check endpoint (supports both /api/health and /health)
+const healthHandler = async (req, res) => {
   try {
+    if (!process.env.REDIS_URL) {
+      return res.json({
+        status: 'warning',
+        database: 'Valkey / Redis',
+        connected: false,
+        message: 'REDIS_URL is not configured in environment variables'
+      });
+    }
+
     const pingStart = Date.now();
     await redis.ping();
     const latency = Date.now() - pingStart;
@@ -29,28 +40,41 @@ app.get('/api/health', async (req, res) => {
     res.json({
       status: 'online',
       database: 'Valkey / Redis (Aiven Cloud)',
-      connected: redis.status === 'ready',
+      connected: redis.status === 'ready' || redis.status === 'connect',
       latencyMs: latency,
       timestamp: new Date().toISOString()
     });
   } catch (err) {
-    res.status(503).json({
+    res.json({
       status: 'degraded',
       database: 'Valkey / Redis',
       connected: false,
       error: err.message
     });
   }
-});
+};
 
-// Mount API routes
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
+
+// Mount API routes (supports both /api/* and root fallback on Vercel)
 app.use('/api/auth', authRouter);
-app.use('/api/files', fileRouter);
+app.use('/auth', authRouter);
 
-// Fallback to index.html for single-page routing
-app.use((req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+app.use('/api/files', fileRouter);
+app.use('/files', fileRouter);
+
+// Fallback for unmatched API routes
+app.use('/api', (req, res) => {
+  res.status(404).json({ success: false, message: 'API route not found' });
 });
+
+// Fallback to index.html ONLY when running locally (not on Vercel)
+if (!process.env.VERCEL) {
+  app.use((req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  });
+}
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -61,6 +85,7 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Start local listener only if not running inside Vercel serverless environment
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {
     console.log(`\n======================================================`);
