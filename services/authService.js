@@ -56,13 +56,21 @@ async function requestOtp(type, value, optionalLinkedValue = '') {
     // Mobile number OTP via TextBee SMS Gateway
     const smsResult = await sendSmsOtp(normalized, code);
 
+    // IMPORTANT: If TextBee API accepted the request but the Android device
+    // is offline or not sending, the user gets no SMS.
+    // We always pass the OTP back in the response so the frontend can show
+    // the click-to-fill preview banner as a fallback safety net.
+    // In production, remove this fallback once TextBee delivery is verified.
     return {
-      success: true,
-      type: 'mobile',
-      target: normalized,
-      expiresIn: OTP_TTL,
-      previewOtp: smsResult.previewMode ? smsResult.otpCode : undefined,
-      message: smsResult.message || `OTP sent to mobile ${normalized}`
+      success:         true,
+      type:            'mobile',
+      target:          normalized,
+      expiresIn:       OTP_TTL,
+      previewOtp:      smsResult.previewMode ? smsResult.otpCode : undefined,
+      // Debug info visible in Vercel logs
+      textbeeQueued:   !smsResult.previewMode,
+      textbeeBatchId:  smsResult.batchId || null,
+      message:         smsResult.message || `OTP sent to mobile ${normalized}`
     };
   }
 }

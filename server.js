@@ -6,6 +6,7 @@ const cors = require('cors');
 const redis = require('./config/redis');
 const { router: authRouter } = require('./routes/authRoutes');
 const fileRouter = require('./routes/fileRoutes');
+const { testTextBeeConnection } = require('./services/smsService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -56,6 +57,29 @@ const healthHandler = async (req, res) => {
 
 app.get('/api/health', healthHandler);
 app.get('/health', healthHandler);
+
+// ─── TextBee Diagnostic Endpoint ─────────────────────────────────────────────
+// Visit: /api/diagnose/textbee  to check your TextBee configuration live
+app.get('/api/diagnose/textbee', async (req, res) => {
+  try {
+    const result = await testTextBeeConnection();
+    const healthy = result.apiKeySet && !result.error;
+    res.status(healthy ? 200 : 400).json({
+      success: healthy,
+      service: 'TextBee SMS Gateway',
+      ...result,
+      instructions: !result.apiKeySet
+        ? 'Go to Vercel → Project → Settings → Environment Variables → Add TEXTBEE_API_KEY'
+        : !result.deviceIdSet
+        ? 'Optional: Set TEXTBEE_DEVICE_ID to pin a specific Android device'
+        : result.error
+        ? 'Fix the error above, then redeploy on Vercel'
+        : 'Configuration looks good! If SMS still fails, check device is online in TextBee app.'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Mount API routes (supports both /api/* and root fallback on Vercel)
 app.use('/api/auth', authRouter);
