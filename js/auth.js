@@ -1,4 +1,5 @@
 // Auth State & Management
+let currentAuthMode = 'login'; // 'login' or 'signup'
 let currentAuthType = 'email'; // 'email' or 'mobile'
 let pendingIdentifier = '';
 let currentUser = null;
@@ -43,17 +44,39 @@ function showToast(message, type = 'info') {
   setTimeout(() => {
     toast.classList.add('opacity-0', 'translate-x-4');
     setTimeout(() => toast.remove(), 300);
-  }, 4500);
+  }, 5000);
 }
 
-// Tab Switching
+// Switch between Login and Signup modes
+function setAuthMode(mode) {
+  currentAuthMode = mode;
+  const btnSignin = document.getElementById('btn-mode-signin');
+  const btnSignup = document.getElementById('btn-mode-signup');
+  const containerLogin = document.getElementById('container-mode-login');
+  const containerSignup = document.getElementById('container-mode-signup');
+  const cardSubtitle = document.getElementById('auth-card-subtitle');
+
+  if (mode === 'signup') {
+    btnSignup.className = 'flex-1 py-3 text-xs sm:text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 transition-all flex items-center justify-center gap-1.5';
+    btnSignin.className = 'flex-1 py-3 text-xs sm:text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-700 transition-all flex items-center justify-center gap-1.5';
+    containerSignup.classList.remove('hidden');
+    containerLogin.classList.add('hidden');
+    if (cardSubtitle) cardSubtitle.innerText = 'Create your account to backup files';
+  } else {
+    btnSignin.className = 'flex-1 py-3 text-xs sm:text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 transition-all flex items-center justify-center gap-1.5';
+    btnSignup.className = 'flex-1 py-3 text-xs sm:text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-700 transition-all flex items-center justify-center gap-1.5';
+    containerLogin.classList.remove('hidden');
+    containerSignup.classList.add('hidden');
+    if (cardSubtitle) cardSubtitle.innerText = 'Sign in to access your file backup vault';
+  }
+}
+
+// Tab Switching for Login Methods
 document.addEventListener('DOMContentLoaded', () => {
   const tabEmail = document.getElementById('tab-email');
   const tabMobile = document.getElementById('tab-mobile');
   const fieldEmail = document.getElementById('field-email-container');
   const fieldMobile = document.getElementById('field-mobile-container');
-  const extraLinkLabel = document.getElementById('extra-link-label');
-  const extraLinkInput = document.getElementById('extra-link-input');
 
   if (tabEmail && tabMobile) {
     tabEmail.addEventListener('click', () => {
@@ -62,8 +85,6 @@ document.addEventListener('DOMContentLoaded', () => {
       tabMobile.className = 'flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg text-slate-500 hover:text-slate-800 transition-all flex items-center justify-center gap-2';
       fieldEmail.classList.remove('hidden');
       fieldMobile.classList.add('hidden');
-      if (extraLinkLabel) extraLinkLabel.innerText = 'Link Mobile Number (Optional)';
-      if (extraLinkInput) extraLinkInput.placeholder = 'e.g. +91 9876543210';
     });
 
     tabMobile.addEventListener('click', () => {
@@ -72,51 +93,91 @@ document.addEventListener('DOMContentLoaded', () => {
       tabEmail.className = 'flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg text-slate-500 hover:text-slate-800 transition-all flex items-center justify-center gap-2';
       fieldMobile.classList.remove('hidden');
       fieldEmail.classList.add('hidden');
-      if (extraLinkLabel) extraLinkLabel.innerText = 'Link Email Address (Optional)';
-      if (extraLinkInput) extraLinkInput.placeholder = 'e.g. user@example.com';
     });
   }
 
-  // Check existing session
+  // Check existing session on load
   checkAuthSession();
 });
 
-// Request OTP
+// Request OTP (Handles both Login and Signup)
 async function handleRequestOtp() {
-  const btn = document.getElementById('btn-send-otp');
-  const inputEmail = document.getElementById('input-email');
-  const inputMobile = document.getElementById('input-mobile');
+  let btn;
+  let payload = { mode: currentAuthMode };
 
-  const identifier = currentAuthType === 'email' ? inputEmail.value.trim() : inputMobile.value.trim();
+  if (currentAuthMode === 'signup') {
+    btn = document.getElementById('btn-signup-submit');
+    const name = document.getElementById('signup-name').value.trim();
+    const email = document.getElementById('signup-email').value.trim();
+    const mobile = document.getElementById('signup-mobile').value.trim();
+    const verifyChannel = document.querySelector('input[name="signup-channel"]:checked')?.value || 'email';
 
-  if (!identifier) {
-    showToast(`Please enter your ${currentAuthType === 'email' ? 'email address' : 'mobile number'}`, 'warning');
-    return;
+    if (!name) {
+      showToast('Please enter your full name', 'warning');
+      return;
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast('Please enter a valid email address', 'warning');
+      return;
+    }
+    if (!mobile || mobile.replace(/\D/g, '').length < 8) {
+      showToast('Please enter a valid mobile number with country code', 'warning');
+      return;
+    }
+
+    currentAuthType = verifyChannel;
+    pendingIdentifier = verifyChannel === 'email' ? email : mobile;
+
+    payload.type = verifyChannel;
+    payload.identifier = pendingIdentifier;
+    payload.name = name;
+    payload.email = email;
+    payload.mobile = mobile;
+
+  } else {
+    // Mode is 'login'
+    btn = document.getElementById('btn-send-otp');
+    const inputEmail = document.getElementById('input-email');
+    const inputMobile = document.getElementById('input-mobile');
+    const identifier = currentAuthType === 'email' ? inputEmail.value.trim() : inputMobile.value.trim();
+
+    if (!identifier) {
+      showToast(`Please enter your ${currentAuthType === 'email' ? 'email address' : 'mobile number'}`, 'warning');
+      return;
+    }
+
+    pendingIdentifier = identifier;
+    payload.type = currentAuthType;
+    payload.identifier = pendingIdentifier;
   }
 
   btn.disabled = true;
-  btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin text-sm"></i> <span>Sending OTP...</span>`;
+  const originalHtml = btn.innerHTML;
+  btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin text-sm"></i> <span>Processing...</span>`;
 
   try {
     const res = await fetch('/api/auth/request-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: currentAuthType, identifier })
+      body: JSON.stringify(payload)
     });
 
     const data = await res.json();
 
     if (!res.ok || !data.success) {
-      throw new Error(data.message || 'Failed to send OTP code');
+      // If user is already registered or not found, show actionable toast
+      throw new Error(data.message || 'Failed to request verification code');
     }
 
-    pendingIdentifier = identifier;
-    showToast(data.message || 'OTP verification code sent!', 'success');
+    showToast(data.message || 'Verification code dispatched!', 'success');
 
     // Move to step 2: OTP screen
     document.getElementById('auth-step-input').classList.add('hidden');
     document.getElementById('auth-step-otp').classList.remove('hidden');
     document.getElementById('display-target-identifier').innerText = pendingIdentifier;
+    document.getElementById('otp-header-subtitle').innerText = currentAuthMode === 'signup'
+      ? 'Confirming your new account registration'
+      : 'Sign in verification';
 
     // Handle preview OTP banner if in dev / preview mode
     const previewBanner = document.getElementById('preview-otp-banner');
@@ -139,9 +200,15 @@ async function handleRequestOtp() {
 
   } catch (err) {
     showToast(err.message, 'error');
+    // If error indicates account already exists, encourage switching to Sign In
+    if (err.message.includes('already exists') && currentAuthMode === 'signup') {
+      setTimeout(() => setAuthMode('login'), 1500);
+    } else if (err.message.includes('sign up first') && currentAuthMode === 'login') {
+      setTimeout(() => setAuthMode('signup'), 1500);
+    }
   } finally {
     btn.disabled = false;
-    btn.innerHTML = `<span>Send Verification Code</span> <i class="fa-solid fa-arrow-right text-xs"></i>`;
+    btn.innerHTML = originalHtml;
   }
 }
 
@@ -181,7 +248,6 @@ function backToStepInput() {
 // Verify OTP
 async function handleVerifyOtp() {
   const code = document.getElementById('input-otp').value.trim();
-  const extraVal = document.getElementById('extra-link-input')?.value.trim() || '';
 
   if (!code || code.length !== 6) {
     showToast('Please enter the 6-digit verification code', 'warning');
@@ -192,13 +258,6 @@ async function handleVerifyOtp() {
   btn.disabled = true;
   btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin text-sm"></i> <span>Verifying...</span>`;
 
-  const extraDetails = {};
-  if (currentAuthType === 'email' && extraVal) {
-    extraDetails.mobile = extraVal;
-  } else if (currentAuthType === 'mobile' && extraVal) {
-    extraDetails.email = extraVal;
-  }
-
   try {
     const res = await fetch('/api/auth/verify-otp', {
       method: 'POST',
@@ -207,7 +266,7 @@ async function handleVerifyOtp() {
         type: currentAuthType,
         identifier: pendingIdentifier,
         code,
-        extraDetails
+        mode: currentAuthMode
       })
     });
 
@@ -217,7 +276,7 @@ async function handleVerifyOtp() {
       throw new Error(data.message || 'Verification failed');
     }
 
-    showToast('Login successful! Welcome to your vault.', 'success');
+    showToast(data.isNewUser ? 'Account registered successfully! Welcome.' : 'Welcome back to your vault!', 'success');
     currentUser = data.user;
     updateUserInterface(currentUser);
 
@@ -257,7 +316,7 @@ function updateUserInterface(user) {
   document.getElementById('dashboard-section').classList.remove('hidden');
 
   // Display contact info
-  const primaryText = user.email || user.mobile || 'User';
+  const primaryText = user.name || user.email || user.mobile || 'User';
   const secondaryText = user.mobile ? `Phone: ${user.mobile}` : (user.email ? `Email: ${user.email}` : 'No phone linked');
 
   document.getElementById('user-display-primary').innerText = primaryText;

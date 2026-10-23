@@ -50,7 +50,7 @@
           <i class="fa-solid fa-cloud-arrow-up text-3xl text-indigo-100"></i>
         </div>
         <h1 class="text-2xl font-bold tracking-tight">CloudVault Backup</h1>
-        <p class="text-indigo-200 text-sm mt-1">High-speed file backup powered by Valkey / Redis</p>
+        <p id="auth-card-subtitle" class="text-indigo-200 text-sm mt-1">High-speed file backup powered by Valkey / Redis</p>
 
         <!-- Valkey Cloud DB Status Badge -->
         <div class="mt-4 inline-flex items-center gap-2 px-3 py-1 bg-black/20 rounded-full text-xs font-medium text-emerald-300 border border-emerald-500/20">
@@ -62,52 +62,131 @@
       <!-- Auth Form Container -->
       <div class="p-6 sm:p-8">
         
-        <!-- Step 1: Identifier Input (Email or Mobile) -->
+        <!-- Step 1: Identifier Input (Login OR Signup) -->
         <div id="auth-step-input">
-          <!-- Auth Method Tabs -->
-          <div class="flex p-1 bg-slate-100 rounded-xl mb-6">
-            <button id="tab-email" type="button" class="flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-white text-indigo-600 shadow-sm transition-all flex items-center justify-center gap-2">
-              <i class="fa-brands fa-google text-red-500"></i>
-              <span>Google Mail</span>
+          
+          <!-- Mode Switcher: Sign In vs Sign Up -->
+          <div class="flex border-b border-slate-200 mb-6">
+            <button id="btn-mode-signin" type="button" onclick="setAuthMode('login')" class="flex-1 py-3 text-xs sm:text-sm font-bold border-b-2 border-indigo-600 text-indigo-600 transition-all flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-arrow-right-to-bracket"></i>
+              <span>Sign In</span>
             </button>
-            <button id="tab-mobile" type="button" class="flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg text-slate-500 hover:text-slate-800 transition-all flex items-center justify-center gap-2">
-              <i class="fa-solid fa-comment-sms text-emerald-600"></i>
-              <span>TextBee SMS</span>
+            <button id="btn-mode-signup" type="button" onclick="setAuthMode('signup')" class="flex-1 py-3 text-xs sm:text-sm font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-700 transition-all flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-user-plus"></i>
+              <span>Create Account</span>
             </button>
           </div>
 
-          <form id="form-request-otp" onsubmit="event.preventDefault(); handleRequestOtp();">
-            <!-- Email Field -->
-            <div id="field-email-container">
-              <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Google / Email Address</label>
-              <div class="relative">
-                <i class="fa-regular fa-envelope absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                <input id="input-email" type="email" placeholder="you@gmail.com" class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition" />
-              </div>
-              <p class="text-xs text-slate-400 mt-1.5 flex items-center gap-1.5">
-                <i class="fa-brands fa-google text-[10px] text-slate-400"></i>
-                <span>OTP verification code will be sent via Google Mail.</span>
-              </p>
+          <!-- ================= LOGIN FORM CONTAINER ================= -->
+          <div id="container-mode-login">
+            <!-- Auth Method Tabs -->
+            <div class="flex p-1 bg-slate-100 rounded-xl mb-5">
+              <button id="tab-email" type="button" class="flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-white text-indigo-600 shadow-sm transition-all flex items-center justify-center gap-2">
+                <i class="fa-brands fa-google text-red-500"></i>
+                <span>Google Mail</span>
+              </button>
+              <button id="tab-mobile" type="button" class="flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg text-slate-500 hover:text-slate-800 transition-all flex items-center justify-center gap-2">
+                <i class="fa-solid fa-comment-sms text-emerald-600"></i>
+                <span>TextBee SMS</span>
+              </button>
             </div>
 
-            <!-- Mobile Field -->
-            <div id="field-mobile-container" class="hidden">
-              <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Mobile Phone Number</label>
-              <div class="relative">
-                <i class="fa-solid fa-phone absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                <input id="input-mobile" type="tel" placeholder="+91 98765 43210" class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition" />
+            <form id="form-login" onsubmit="event.preventDefault(); handleRequestOtp();">
+              <!-- Email Field -->
+              <div id="field-email-container">
+                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Google / Email Address</label>
+                <div class="relative">
+                  <i class="fa-regular fa-envelope absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                  <input id="input-email" type="email" placeholder="you@gmail.com" class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition" />
+                </div>
+                <p class="text-xs text-slate-400 mt-1.5 flex items-center gap-1.5">
+                  <i class="fa-brands fa-google text-[10px] text-slate-400"></i>
+                  <span>OTP verification code will be sent via Google Mail.</span>
+                </p>
               </div>
-              <p class="text-xs text-slate-400 mt-1.5 flex items-center gap-1.5">
-                <i class="fa-solid fa-paper-plane text-[10px] text-emerald-500"></i>
-                <span>SMS OTP delivered via TextBee Gateway.</span>
-              </p>
-            </div>
 
-            <button id="btn-send-otp" type="submit" class="w-full mt-6 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-semibold rounded-xl text-sm shadow-lg shadow-indigo-500/25 transition flex items-center justify-center gap-2">
-              <span>Send Verification Code</span>
-              <i class="fa-solid fa-arrow-right text-xs"></i>
-            </button>
-          </form>
+              <!-- Mobile Field -->
+              <div id="field-mobile-container" class="hidden">
+                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Mobile Phone Number</label>
+                <div class="relative">
+                  <i class="fa-solid fa-phone absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                  <input id="input-mobile" type="tel" placeholder="+91 98765 43210" class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition" />
+                </div>
+                <p class="text-xs text-slate-400 mt-1.5 flex items-center gap-1.5">
+                  <i class="fa-solid fa-paper-plane text-[10px] text-emerald-500"></i>
+                  <span>SMS OTP delivered via TextBee Gateway.</span>
+                </p>
+              </div>
+
+              <button id="btn-send-otp" type="submit" class="w-full mt-6 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-semibold rounded-xl text-sm shadow-lg shadow-indigo-500/25 transition flex items-center justify-center gap-2">
+                <span>Send Verification Code</span>
+                <i class="fa-solid fa-arrow-right text-xs"></i>
+              </button>
+
+              <div class="text-center mt-5 text-xs text-slate-500">
+                Don't have an account yet? 
+                <button type="button" onclick="setAuthMode('signup')" class="text-indigo-600 font-bold hover:underline ml-1">Create Account</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- ================= SIGN UP FORM CONTAINER ================= -->
+          <div id="container-mode-signup" class="hidden">
+            <form id="form-signup" onsubmit="event.preventDefault(); handleRequestOtp();" class="space-y-4">
+              <!-- Full Name -->
+              <div>
+                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Full Name</label>
+                <div class="relative">
+                  <i class="fa-regular fa-user absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                  <input id="signup-name" type="text" placeholder="John Doe" required class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition" />
+                </div>
+              </div>
+
+              <!-- Email Address -->
+              <div>
+                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Email Address</label>
+                <div class="relative">
+                  <i class="fa-regular fa-envelope absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                  <input id="signup-email" type="email" placeholder="you@gmail.com" required class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition" />
+                </div>
+              </div>
+
+              <!-- Mobile Number -->
+              <div>
+                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Mobile Phone Number</label>
+                <div class="relative">
+                  <i class="fa-solid fa-phone absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                  <input id="signup-mobile" type="tel" placeholder="+91 98765 43210" required class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition" />
+                </div>
+              </div>
+
+              <!-- Verification Method Selector -->
+              <div class="pt-1">
+                <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Send Signup Verification Code Via:</label>
+                <div class="grid grid-cols-2 gap-2">
+                  <label class="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-indigo-50/50 hover:border-indigo-300 transition text-xs font-medium">
+                    <input type="radio" name="signup-channel" value="email" checked class="text-indigo-600 focus:ring-indigo-500" />
+                    <span class="flex items-center gap-1.5"><i class="fa-brands fa-google text-red-500"></i> Email</span>
+                  </label>
+                  <label class="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-indigo-50/50 hover:border-indigo-300 transition text-xs font-medium">
+                    <input type="radio" name="signup-channel" value="mobile" class="text-indigo-600 focus:ring-indigo-500" />
+                    <span class="flex items-center gap-1.5"><i class="fa-solid fa-comment-sms text-emerald-600"></i> Mobile SMS</span>
+                  </label>
+                </div>
+              </div>
+
+              <button id="btn-signup-submit" type="submit" class="w-full mt-2 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-semibold rounded-xl text-sm shadow-lg shadow-indigo-500/25 transition flex items-center justify-center gap-2">
+                <span>Create Account & Verify</span>
+                <i class="fa-solid fa-arrow-right text-xs"></i>
+              </button>
+
+              <div class="text-center mt-4 text-xs text-slate-500">
+                Already have an account? 
+                <button type="button" onclick="setAuthMode('login')" class="text-indigo-600 font-bold hover:underline ml-1">Sign In</button>
+              </div>
+            </form>
+          </div>
+
         </div>
 
         <!-- Step 2: OTP Verification -->
@@ -117,6 +196,7 @@
               <i class="fa-solid fa-shield-halved text-xl"></i>
             </div>
             <h2 class="text-lg font-bold text-slate-800">Enter Verification Code</h2>
+            <p id="otp-header-subtitle" class="text-xs text-slate-400 font-medium"></p>
             <p class="text-xs text-slate-500 mt-1">We sent an OTP to <span id="display-target-identifier" class="font-semibold text-indigo-600"></span></p>
           </div>
 
@@ -130,15 +210,9 @@
           </div>
 
           <form id="form-verify-otp" onsubmit="event.preventDefault(); handleVerifyOtp();">
-            <div class="mb-4">
+            <div class="mb-5">
               <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">6-Digit Code</label>
               <input id="input-otp" type="text" maxlength="6" placeholder="123456" class="w-full text-center tracking-[0.5em] font-mono text-2xl py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition" />
-            </div>
-
-            <!-- Optional Extra Info (e.g. link mobile if logged in via email) -->
-            <div id="extra-link-container" class="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-              <label id="extra-link-label" class="block text-xs font-medium text-slate-600 mb-1.5">Link Mobile Number (Optional)</label>
-              <input id="extra-link-input" type="text" placeholder="e.g. +91 9876543210" class="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500" />
             </div>
 
             <button id="btn-verify-otp" type="submit" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-semibold rounded-xl text-sm shadow-lg shadow-indigo-500/25 transition flex items-center justify-center gap-2">

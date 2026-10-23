@@ -27,10 +27,21 @@ async function requireAuth(req, res, next) {
   }
 }
 
-// Request OTP (email or mobile)
+// Check if email or mobile already exists
+router.post('/check-exists', async (req, res) => {
+  try {
+    const { email, mobile } = req.body;
+    const result = await authService.checkUserExists({ email, mobile });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Request OTP (email or mobile) for Login or Signup
 router.post('/request-otp', async (req, res) => {
   try {
-    const { type, identifier } = req.body;
+    const { type, identifier, mode = 'login', name, email, mobile } = req.body;
 
     if (!type || !['email', 'mobile'].includes(type)) {
       return res.status(400).json({ success: false, message: 'Type must be either "email" or "mobile"' });
@@ -52,24 +63,30 @@ router.post('/request-otp', async (req, res) => {
       }
     }
 
-    const result = await authService.requestOtp(type, identifier);
+    const signupDetails = {
+      name: name || '',
+      email: email || (type === 'email' ? identifier : ''),
+      mobile: mobile || (type === 'mobile' ? identifier : '')
+    };
+
+    const result = await authService.requestOtp(type, identifier, mode, signupDetails);
     res.json(result);
   } catch (err) {
     console.error('Request OTP error:', err);
-    res.status(500).json({ success: false, message: err.message || 'Failed to generate OTP' });
+    res.status(400).json({ success: false, message: err.message || 'Failed to generate OTP' });
   }
 });
 
-// Verify OTP
+// Verify OTP for Login or Signup
 router.post('/verify-otp', async (req, res) => {
   try {
-    const { type, identifier, code, extraDetails } = req.body;
+    const { type, identifier, code, extraDetails, mode = 'login' } = req.body;
 
     if (!type || !identifier || !code) {
       return res.status(400).json({ success: false, message: 'Identifier, type, and OTP code are required' });
     }
 
-    const result = await authService.verifyOtp(type, identifier, code, extraDetails || {});
+    const result = await authService.verifyOtp(type, identifier, code, extraDetails || {}, mode);
 
     // Set HTTP-only session cookie
     res.cookie('session_token', result.token, {

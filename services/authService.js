@@ -2,7 +2,7 @@ const redis = require('../config/redis');
 const crypto = require('crypto');
 const uuidv4 = () => crypto.randomUUID();
 const { sendOtpEmail } = require('./emailService');
-const { sendSmsOtp } = require('./smsService');
+const { sendSmsOtp, formatE164 } = require('./smsService');
 
 const OTP_TTL = parseInt(process.env.OTP_TTL || '600'); // 10 minutes
 const SESSION_TTL = parseInt(process.env.SESSION_TTL || '604800'); // 7 days
@@ -16,18 +16,50 @@ function generateOtp() {
  * Clean & normalize identifier
  */
 function normalizeIdentifier(type, value) {
+  if (!value) return '';
   if (type === 'email') {
     return value.trim().toLowerCase();
   } else if (type === 'mobile') {
-    return value.replace(/[^0-9+]/g, '');
+    return formatE164(value);
   }
   return value.trim();
 }
 
 /**
- * Send OTP for email or mobile login
+ * Check if email or mobile is already registered
  */
-async function requestOtp(type, value, optionalLinkedValue = '') {
+async function checkUserExists({ email, mobile }) {
+  const pipeline = redis.pipeline();
+  const cleanEmail = email ? normalizeIdentifier('email', email) : null;
+  const cleanMobile = mobile ? normalizeIdentifier('mobile', mobile) : null;
+
+  if (cleanEmail) pipeline.get(`user:by_email:${cleanEmail}`);
+  if (cleanMobile) pipeline.get(`user:by_mobile:${cleanMobile}`);
+
+  const results = await pipeline.exec();
+  let emailExists = false;
+  let mobileExists = false;
+
+  let idx = 0;
+  if (cleanEmail) {
+    emailExists = !!(results[idx] && results[idx][1]);
+    idx++;
+  }
+  if (cleanMobile) {
+    mobileExists = !!(results[idx] && results[idx][1]);
+  }
+
+  return { emailExists, mobileExists, cleanEmail, cleanMobile };
+}
+
+/**
+ * Send OTP for email or mobile login/signup
+ * @param {string} type - 'email' | 'mobile'
+ * @param {string} value - identifier value
+ * @param {string} mode - 'login' | 'signup'
+ * @param {object} signupDetails - { name, email, mobile }
+ */
+async function requestOtp(type, value, mode = 'login', signupDetails = {}) {
   if (!type || !value) {
     throw new Error('Type and identifier are required');
   }
@@ -36,16 +68,53 @@ async function requestOtp(type, value, optionalLinkedValue = '') {
   const otpKey = `otp:${type}:${normalized}`;
   const code = generateOtp();
 
+  // Validate according to mode: 'signup' vs 'login'
+  if (mode === 'signup') {
+    const emailToCheck = signupDetails.email ? normalizeIdentifier('email', signupDetails.email) : (type === 'email' ? normalized : '');
+    const mobileToCheck = signupDetails.mobile ? normalizeIdentifier('mobile', signupDetails.mobile) : (type === 'mobile' ? normalized : '');
+
+    const { emailExists, mobileExists } = await checkUserExists({
+      email: emailToCheck,
+      mobile: mobileToCheck
+    });
+
+    if (emailExists) {
+      throw new Error(`An account with the email (${emailToCheck}) already exists. Please sign in instead.`);
+    }
+
+    if (mobileExists) {
+      throw new Error(`An account with the mobile number (${mobileToCheck}) already exists. Please sign in instead.`);
+    }
+
+    // Save pending signup profile in Redis alongside OTP
+    const pendingKey = `pending_signup:${type}:${normalized}`;
+    const pendingData = {
+      name: (signupDetails.name || '').trim() || (type === 'email' ? normalized.split('@')[0] : `User_${normalized.slice(-4)}`),
+      email: emailToCheck,
+      mobile: mobileToCheck
+    };
+    await redis.set(pendingKey, JSON.stringify(pendingData), 'EX', OTP_TTL);
+  } else {
+    // Mode is 'login': ensure user already exists!
+    const indexKey = `user:by_${type}:${normalized}`;
+    const existingUserId = await redis.get(indexKey);
+
+    if (!existingUserId) {
+      throw new Error(`No account found with this ${type === 'email' ? 'email address' : 'mobile number'}. Please sign up first.`);
+    }
+  }
+
   // Save OTP in Redis with expiry
   await redis.set(otpKey, code, 'EX', OTP_TTL);
 
-  // If email login, send via email
+  // Send OTP
   if (type === 'email') {
     const emailResult = await sendOtpEmail(normalized, code);
     return {
       success: true,
       type: 'email',
       target: normalized,
+      mode,
       expiresIn: OTP_TTL,
       previewOtp: emailResult.previewMode ? emailResult.otpCode : undefined,
       message: emailResult.previewMode
@@ -53,44 +122,40 @@ async function requestOtp(type, value, optionalLinkedValue = '') {
         : `OTP sent successfully to ${normalized}`
     };
   } else {
-    // Mobile number OTP via TextBee SMS Gateway
     const smsResult = await sendSmsOtp(normalized, code);
-
-    // IMPORTANT: If TextBee API accepted the request but the Android device
-    // is offline or not sending, the user gets no SMS.
-    // We always pass the OTP back in the response so the frontend can show
-    // the click-to-fill preview banner as a fallback safety net.
-    // In production, remove this fallback once TextBee delivery is verified.
     return {
-      success:         true,
-      type:            'mobile',
-      target:          normalized,
-      expiresIn:       OTP_TTL,
-      previewOtp:      smsResult.previewMode ? smsResult.otpCode : undefined,
-      // Debug info visible in Vercel logs
-      textbeeQueued:   !smsResult.previewMode,
-      textbeeBatchId:  smsResult.batchId || null,
-      message:         smsResult.message || `OTP sent to mobile ${normalized}`
+      success: true,
+      type: 'mobile',
+      target: normalized,
+      mode,
+      expiresIn: OTP_TTL,
+      previewOtp: smsResult.previewMode ? smsResult.otpCode : undefined,
+      textbeeQueued: !smsResult.previewMode,
+      textbeeBatchId: smsResult.batchId || null,
+      message: smsResult.message || `OTP sent to mobile ${normalized}`
     };
   }
 }
 
 /**
- * Verify OTP and authenticate user (Optimized with Redis Pipelining)
+ * Verify OTP and authenticate user (Supports distinct Login and Signup)
  */
-async function verifyOtp(type, value, code, extraDetails = {}) {
+async function verifyOtp(type, value, code, extraDetails = {}, mode = 'login') {
   const normalized = normalizeIdentifier(type, value);
   const otpKey = `otp:${type}:${normalized}`;
   const indexKey = `user:by_${type}:${normalized}`;
+  const pendingKey = `pending_signup:${type}:${normalized}`;
 
-  // STEP 1: Single pipelined roundtrip to fetch OTP and existing user index simultaneously
+  // STEP 1: Single pipelined roundtrip to fetch OTP, existing user, and pending signup
   const pipeline1 = redis.pipeline();
   pipeline1.get(otpKey);
   pipeline1.get(indexKey);
+  pipeline1.get(pendingKey);
   const results1 = await pipeline1.exec();
 
   const storedOtp = results1[0][1];
   const existingUserId = results1[1][1];
+  const pendingDataRaw = results1[2][1];
 
   if (!storedOtp) {
     throw new Error('OTP has expired or was not requested. Please request a new OTP.');
@@ -100,61 +165,75 @@ async function verifyOtp(type, value, code, extraDetails = {}) {
     throw new Error('Invalid verification code. Please check and try again.');
   }
 
-  // STEP 2: Prepare session & user payload
+  let pendingData = null;
+  if (pendingDataRaw) {
+    try {
+      pendingData = JSON.parse(pendingDataRaw);
+    } catch (_) {}
+  }
+
   const token = 'sess_' + uuidv4().replace(/-/g, '');
   const now = new Date().toISOString();
-  let userId = existingUserId;
+  let userId;
+  let finalUser;
   let isNewUser = false;
-  let userData = {};
 
   const pipeline2 = redis.pipeline();
-  pipeline2.del(otpKey); // Delete consumed OTP immediately
+  pipeline2.del(otpKey);
+  pipeline2.del(pendingKey);
 
-  if (!userId) {
+  if (mode === 'signup') {
+    // 1. Strict guard: Make sure details are not taken
+    const emailToRegister = (pendingData?.email || extraDetails.email || (type === 'email' ? normalized : '')).trim().toLowerCase();
+    const mobileToRegister = (pendingData?.mobile || extraDetails.mobile || (type === 'mobile' ? normalized : '')).trim();
+
+    const { emailExists, mobileExists } = await checkUserExists({
+      email: emailToRegister,
+      mobile: mobileToRegister
+    });
+
+    if (emailExists) {
+      throw new Error(`An account with email (${emailToRegister}) is already registered. Please sign in.`);
+    }
+    if (mobileExists) {
+      throw new Error(`An account with mobile (${mobileToRegister}) is already registered. Please sign in.`);
+    }
+
     userId = 'usr_' + uuidv4().replace(/-/g, '').slice(0, 16);
     isNewUser = true;
 
-    userData = {
+    finalUser = {
       id: userId,
-      email: type === 'email' ? normalized : (extraDetails.email ? normalizeIdentifier('email', extraDetails.email) : ''),
-      mobile: type === 'mobile' ? normalized : (extraDetails.mobile ? normalizeIdentifier('mobile', extraDetails.mobile) : ''),
-      name: extraDetails.name || (type === 'email' ? normalized.split('@')[0] : `User_${normalized.slice(-4)}`),
+      email: emailToRegister,
+      mobile: mobileToRegister,
+      name: (pendingData?.name || extraDetails.name || '').trim() || (emailToRegister ? emailToRegister.split('@')[0] : `User_${mobileToRegister.slice(-4)}`),
       createdAt: now,
       lastLogin: now
     };
 
     pipeline2.set(indexKey, userId);
-    if (userData.email) pipeline2.set(`user:by_email:${userData.email}`, userId);
-    if (userData.mobile) pipeline2.set(`user:by_mobile:${userData.mobile}`, userId);
-    pipeline2.hset(`user:${userId}`, userData);
+    if (finalUser.email) pipeline2.set(`user:by_email:${finalUser.email}`, userId);
+    if (finalUser.mobile) pipeline2.set(`user:by_mobile:${finalUser.mobile}`, userId);
+    pipeline2.hset(`user:${userId}`, finalUser);
+
   } else {
-    // Existing user: update last login and optional details
+    // Mode is 'login': user must exist
+    if (!existingUserId) {
+      throw new Error(`No account found for this ${type === 'email' ? 'email' : 'mobile'}. Please sign up first.`);
+    }
+
+    userId = existingUserId;
     const updates = { lastLogin: now };
-    if (extraDetails.email) {
-      const cleanEmail = normalizeIdentifier('email', extraDetails.email);
-      updates.email = cleanEmail;
-      pipeline2.set(`user:by_email:${cleanEmail}`, userId);
-    }
-    if (extraDetails.mobile) {
-      const cleanMobile = normalizeIdentifier('mobile', extraDetails.mobile);
-      updates.mobile = cleanMobile;
-      pipeline2.set(`user:by_mobile:${cleanMobile}`, userId);
-    }
     pipeline2.hset(`user:${userId}`, updates);
-    pipeline2.hgetall(`user:${userId}`); // Retrieve full profile in the same pipeline!
+    pipeline2.hgetall(`user:${userId}`);
   }
 
-  // Store active session token with TTL
+  // Save session token
   pipeline2.set(`session:${token}`, userId, 'EX', SESSION_TTL);
 
-  // STEP 3: Execute all writes & fetch in ONE single atomic pipelined roundtrip
   const results2 = await pipeline2.exec();
 
-  let finalUser;
-  if (isNewUser) {
-    finalUser = userData;
-  } else {
-    // Extract hgetall result from pipeline
+  if (!isNewUser) {
     const hgetallEntry = results2.find(r => r[1] && typeof r[1] === 'object' && r[1].id);
     finalUser = hgetallEntry ? hgetallEntry[1] : await redis.hgetall(`user:${userId}`);
   }
@@ -196,12 +275,22 @@ async function updateUserProfile(userId, { name, mobile, email }) {
 
   if (mobile !== undefined && mobile.trim() !== '') {
     const cleanMobile = normalizeIdentifier('mobile', mobile);
+    // Ensure mobile is not taken by another user
+    const existingForMobile = await redis.get(`user:by_mobile:${cleanMobile}`);
+    if (existingForMobile && existingForMobile !== userId) {
+      throw new Error('This mobile number is already linked to another account');
+    }
     updates.mobile = cleanMobile;
     await redis.set(`user:by_mobile:${cleanMobile}`, userId);
   }
 
   if (email !== undefined && email.trim() !== '') {
     const cleanEmail = normalizeIdentifier('email', email);
+    // Ensure email is not taken by another user
+    const existingForEmail = await redis.get(`user:by_email:${cleanEmail}`);
+    if (existingForEmail && existingForEmail !== userId) {
+      throw new Error('This email address is already linked to another account');
+    }
     updates.email = cleanEmail;
     await redis.set(`user:by_email:${cleanEmail}`, userId);
   }
@@ -226,6 +315,7 @@ async function logout(token) {
 module.exports = {
   requestOtp,
   verifyOtp,
+  checkUserExists,
   getUserByToken,
   updateUserProfile,
   logout
