@@ -2,7 +2,6 @@ const redis = require('../config/redis');
 const crypto = require('crypto');
 const uuidv4 = () => crypto.randomUUID();
 const path = require('path');
-const archiver = require('archiver');
 
 /**
  * Save an uploaded file directly into Valkey / Redis database for backup
@@ -428,16 +427,19 @@ async function batchTrashFiles(userId, fileIds) {
   return { success: true, trashedCount, message: `${trashedCount} file(s) moved to Trash` };
 }
 
-function createZipArchive(options = { zlib: { level: 6 } }) {
-  const mod = require('archiver');
-  if (typeof mod === 'function') {
-    return mod('zip', options);
-  }
-  if (mod.default && typeof mod.default === 'function') {
-    return mod.default('zip', options);
+async function createZipArchive(options = { zlib: { level: 6 } }) {
+  let mod;
+  try {
+    mod = await import('archiver');
+  } catch (e) {
+    mod = require('archiver');
   }
   if (mod.ZipArchive) {
     return new mod.ZipArchive(options);
+  }
+  const fn = mod.default || mod;
+  if (typeof fn === 'function') {
+    return fn('zip', options);
   }
   throw new Error('Unsupported archiver module structure');
 }
@@ -454,7 +456,7 @@ async function downloadFilesAsZip(userId, fileIds, res) {
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename="${zipFilename}"`);
 
-  const archive = createZipArchive({ zlib: { level: 6 } });
+  const archive = await createZipArchive({ zlib: { level: 6 } });
 
   archive.on('error', (err) => {
     console.error('ZIP generation error:', err);
