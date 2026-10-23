@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Download Shared File - CloudVault</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 font-sans text-slate-800 antialiased min-h-screen flex flex-col selection:bg-indigo-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200">
+    <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
+          <i class="fa-solid fa-cloud-arrow-up text-base"></i>
+        </div>
+        <div>
+          <span class="font-bold text-slate-900 text-base leading-tight block">CloudVault</span>
+          <span class="text-[10px] text-slate-400 font-medium">Secure File Sharing</span>
+        </div>
+      </a>
+
+      <a href="/" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition flex items-center gap-1.5">
+        <span>Get Free Vault</span>
+        <i class="fa-solid fa-arrow-right text-[10px]"></i>
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 flex items-center justify-center p-4 sm:p-6">
+    <div class="w-full max-w-lg bg-white rounded-3xl shadow-xl border border-slate-200/80 overflow-hidden">
+      
+      <!-- Top Banner -->
+      <div class="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 text-white text-center relative overflow-hidden">
+        <div class="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center mx-auto mb-3 shadow-inner ring-1 ring-white/20">
+          <i class="fa-solid fa-share-nodes text-2xl text-indigo-100"></i>
+        </div>
+        <p id="owner-banner" class="text-xs uppercase tracking-wider font-semibold text-indigo-200 mb-0.5">Shared via CloudVault</p>
+        <h1 class="text-lg font-bold">Secure Shared File</h1>
+      </div>
+
+      <!-- State: Loading -->
+      <div id="state-loading" class="p-10 text-center text-slate-400">
+        <i class="fa-solid fa-circle-notch fa-spin text-3xl text-indigo-600 mb-3"></i>
+        <p class="text-sm font-medium">Fetching file details from vault...</p>
+      </div>
+
+      <!-- State: Expired / Not Found -->
+      <div id="state-error" class="hidden p-8 text-center">
+        <div class="w-16 h-16 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-4 text-2xl">
+          <i class="fa-solid fa-link-slash"></i>
+        </div>
+        <h2 class="text-base font-bold text-slate-800 mb-1" id="error-title">Link Unavailable</h2>
+        <p class="text-xs text-slate-500 max-w-xs mx-auto mb-6" id="error-message">This share link has expired, reached its download limit, or was revoked by the sender.</p>
+        <a href="/" class="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-semibold shadow hover:bg-indigo-700 transition">
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+          <span>Create Your Free Backup Vault</span>
+        </a>
+      </div>
+
+      <!-- State: Password Protected -->
+      <div id="state-password" class="hidden p-8 text-center">
+        <div class="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4 text-2xl shadow-inner">
+          <i class="fa-solid fa-lock"></i>
+        </div>
+        <h2 class="text-base font-bold text-slate-800 mb-1">Password Protected File</h2>
+        <p class="text-xs text-slate-500 max-w-xs mx-auto mb-5">The sender has protected this file with a password. Enter it below to unlock.</p>
+
+        <form id="form-password" onsubmit="event.preventDefault(); unlockShare();" class="max-w-xs mx-auto space-y-3">
+          <input id="input-password" type="password" placeholder="Enter share password" required class="w-full text-center px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <p id="password-error" class="hidden text-xs text-rose-500 font-medium"></p>
+          <button type="submit" id="btn-unlock" class="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs shadow-md shadow-indigo-500/20 transition flex items-center justify-center gap-2">
+            <i class="fa-solid fa-key"></i>
+            <span>Unlock File</span>
+          </button>
+        </form>
+      </div>
+
+      <!-- State: Ready to Download / Preview -->
+      <div id="state-ready" class="hidden p-6 sm:p-8 space-y-6">
+        
+        <!-- File Card -->
+        <div class="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center gap-4">
+          <div class="w-14 h-14 rounded-2xl bg-white border border-slate-200 text-indigo-600 flex items-center justify-center text-2xl shadow-sm">
+            <i id="file-icon" class="fa-solid fa-file"></i>
+          </div>
+          <div class="flex-1 truncate">
+            <h3 id="file-name" class="font-bold text-sm text-slate-800 truncate" title="filename">filename.ext</h3>
+            <div class="flex items-center gap-2 text-xs text-slate-400 mt-1 font-mono">
+              <span id="file-size">0 B</span>
+              <span>•</span>
+              <span id="file-expiry" class="text-indigo-600 font-sans font-medium">Valid</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Preview Area (if supported) -->
+        <div id="preview-box" class="hidden border border-slate-200 rounded-2xl overflow-hidden bg-slate-900/5 max-h-80 flex items-center justify-center">
+          <!-- Dynamically populated -->
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="space-y-2 pt-2">
+          <a id="btn-download" href="#" class="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-bold rounded-xl text-sm shadow-lg shadow-indigo-500/25 transition flex items-center justify-center gap-2">
+            <i class="fa-solid fa-download"></i>
+            <span id="btn-download-text">Download File</span>
+          </a>
+
+          <p class="text-center text-[11px] text-slate-400">
+            Backed up directly in Valkey Cloud database with TLS encryption.
+          </p>
+        </div>
+
+      </div>
+
+      <!-- Viral Footer CTA -->
+      <div class="bg-slate-50 px-6 py-4 border-t border-slate-100 flex items-center justify-between text-xs">
+        <span class="text-slate-500 font-medium">Need your own file backup?</span>
+        <a href="/" class="text-indigo-600 font-bold hover:underline">Get CloudVault Free →</a>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    const segments = window.location.pathname.split('/').filter(Boolean);
+    const shareId = segments[segments.length - 1];
+    let currentShare = null;
+    let verifiedPassword = '';
+
+    async function loadShare() {
+      try {
+        const res = await fetch(`/api/shares/public/${shareId}`);
+        const data = await res.json();
+
+        document.getElementById('state-loading').classList.add('hidden');
+
+        if (!res.ok || !data.success) {
+          showError(data.message || 'Share link unavailable');
+          return;
+        }
+
+        currentShare = data.share;
+        document.getElementById('owner-banner').innerText = `${currentShare.ownerName || 'A user'} shared a file with you`;
+
+        if (currentShare.hasPassword) {
+          document.getElementById('state-password').classList.remove('hidden');
+        } else {
+          renderReadyState();
+        }
+
+      } catch (err) {
+        document.getElementById('state-loading').classList.add('hidden');
+        showError('Network error connecting to CloudVault');
+      }
+    }
+
+    async function unlockShare() {
+      const pwd = document.getElementById('input-password').value;
+      const btn = document.getElementById('btn-unlock');
+      const errEl = document.getElementById('password-error');
+
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Unlocking...`;
+      errEl.classList.add('hidden');
+
+      try {
+        const res = await fetch(`/api/shares/public/${shareId}/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pwd })
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.message || 'Incorrect password');
+        }
+
+        verifiedPassword = pwd;
+        document.getElementById('state-password').classList.add('hidden');
+        renderReadyState();
+
+      } catch (err) {
+        errEl.innerText = err.message;
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-key"></i> <span>Unlock File</span>`;
+      }
+    }
+
+    function renderReadyState() {
+      document.getElementById('state-ready').classList.remove('hidden');
+      document.getElementById('file-name').innerText = currentShare.originalName;
+      document.getElementById('file-size').innerText = formatBytes(currentShare.size);
+      document.getElementById('file-icon').className = getFileIconClass(currentShare.originalName);
+
+      const downloadUrl = `/api/shares/public/${shareId}/download${verifiedPassword ? '?pwd=' + encodeURIComponent(verifiedPassword) : ''}`;
+      const previewUrl = `/api/shares/public/${shareId}/preview${verifiedPassword ? '?pwd=' + encodeURIComponent(verifiedPassword) : ''}`;
+
+      const btnDl = document.getElementById('btn-download');
+      btnDl.href = downloadUrl;
+      btnDl.setAttribute('download', currentShare.originalName);
+      document.getElementById('btn-download-text').innerText = `Download File (${formatBytes(currentShare.size)})`;
+
+      if (currentShare.expiresAt !== 'never') {
+        const expDate = new Date(currentShare.expiresAt);
+        document.getElementById('file-expiry').innerText = `Expires: ${expDate.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+      } else {
+        document.getElementById('file-expiry').innerText = 'No expiration';
+      }
+
+      // Check preview
+      const mime = currentShare.mimeType || '';
+      const previewBox = document.getElementById('preview-box');
+
+      if (mime.startsWith('image/')) {
+        previewBox.innerHTML = `<img src="${previewUrl}" class="max-h-72 max-w-full rounded-xl object-contain" alt="${currentShare.originalName}" />`;
+        previewBox.classList.remove('hidden');
+      } else if (mime.startsWith('audio/')) {
+        previewBox.innerHTML = `<audio controls class="w-full max-w-md m-4"><source src="${previewUrl}" type="${mime}">Your browser does not support audio playback.</audio>`;
+        previewBox.classList.remove('hidden');
+      } else if (mime.startsWith('video/')) {
+        previewBox.innerHTML = `<video controls class="max-h-72 max-w-full rounded-xl"><source src="${previewUrl}" type="${mime}">Your browser does not support video playback.</video>`;
+        previewBox.classList.remove('hidden');
+      }
+    }
+
+    function showError(msg) {
+      document.getElementById('state-error').classList.remove('hidden');
+      document.getElementById('error-message').innerText = msg;
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function getFileIconClass(filename) {
+      const ext = (filename.split('.').pop() || '').toLowerCase();
+      switch (ext) {
+        case 'pdf': return 'fa-solid fa-file-pdf text-rose-500';
+        case 'doc':
+        case 'docx': return 'fa-solid fa-file-word text-blue-500';
+        case 'xls':
+        case 'xlsx':
+        case 'csv': return 'fa-solid fa-file-excel text-emerald-500';
+        case 'zip':
+        case 'rar':
+        case '7z': return 'fa-solid fa-file-zipper text-amber-500';
+        case 'jpg':
+        case 'jpeg':
+        case 'png':
+        case 'gif':
+        case 'webp': return 'fa-solid fa-file-image text-purple-500';
+        case 'mp3':
+        case 'wav': return 'fa-solid fa-file-audio text-pink-500';
+        case 'mp4':
+        case 'mov': return 'fa-solid fa-file-video text-red-500';
+        default: return 'fa-solid fa-file text-slate-500';
+      }
+    }
+
+    loadShare();
+  </script>
+</body>
+</html>

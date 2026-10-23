@@ -1,11 +1,14 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const redis = require('./config/redis');
 const { router: authRouter } = require('./routes/authRoutes');
 const fileRouter = require('./routes/fileRoutes');
+const shareRouter = require('./routes/shareRoutes');
+const folderRouter = require('./routes/folderRoutes');
 const { testTextBeeConnection } = require('./services/smsService');
 
 const app = express();
@@ -87,6 +90,20 @@ app.use('/auth', authRouter);
 
 app.use('/api/files', fileRouter);
 app.use('/files', fileRouter);
+
+app.use('/api/shares', shareRouter);
+app.use('/shares', shareRouter);
+
+app.use('/api/folders', folderRouter);
+app.use('/folders', folderRouter);
+
+// Public share landing page
+app.get('/share/:shareId', (req, res) => {
+  const shareFile = fs.existsSync(path.join(__dirname, 'public', 'share.html'))
+    ? path.join(__dirname, 'public', 'share.html')
+    : path.join(__dirname, 'share.html');
+  res.sendFile(shareFile);
+});
 
 // Fallback for unmatched API routes
 app.use('/api', (req, res) => {

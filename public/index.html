@@ -307,14 +307,24 @@
           </div>
         </div>
 
-        <!-- Card 2: Total Storage Used -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-          <div class="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl">
-            <i class="fa-solid fa-hard-drive"></i>
+        <!-- Card 2: Total Storage Used & Quota Progress -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl shrink-0">
+              <i class="fa-solid fa-hard-drive"></i>
+            </div>
+            <div class="truncate">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Storage Stored</span>
+              <div class="flex items-baseline gap-1.5">
+                <span id="stat-total-size" class="text-xl font-bold text-slate-800 leading-tight">0 B</span>
+                <span id="stat-quota-total" class="text-xs text-slate-400 font-medium">/ 500 MB</span>
+              </div>
+            </div>
           </div>
-          <div>
-            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Storage Stored</span>
-            <span id="stat-total-size" class="text-2xl font-bold text-slate-800 leading-tight">0 B</span>
+          <div class="mt-3">
+            <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+              <div id="stat-storage-progress" class="bg-gradient-to-r from-indigo-500 to-purple-600 h-1.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
           </div>
         </div>
 
@@ -372,6 +382,14 @@
           
           <div id="staging-list" class="space-y-2 max-h-48 overflow-y-auto pr-1"></div>
 
+          <!-- Destination Folder Selector -->
+          <div class="flex items-center gap-2 text-xs pt-1">
+            <span class="text-slate-500 font-medium"><i class="fa-regular fa-folder text-indigo-500"></i> Upload destination:</span>
+            <select id="upload-target-folder" class="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="root">📁 Home (Root)</option>
+            </select>
+          </div>
+
           <!-- Upload Action Button & Progress Bar -->
           <div class="pt-2">
             <div id="upload-progress-container" class="hidden mb-3">
@@ -420,8 +438,33 @@
               <option value="other">Other</option>
             </select>
 
+            <!-- Starred Filter Button -->
+            <button id="btn-filter-starred" onclick="toggleStarredFilter()" title="Filter Starred Favorites" class="px-3 py-1.5 text-xs font-semibold bg-slate-50 text-slate-600 hover:bg-amber-50 hover:text-amber-600 rounded-lg transition flex items-center gap-1.5 border border-slate-200">
+              <i id="filter-star-icon" class="fa-regular fa-star text-amber-500"></i>
+              <span>Starred</span>
+            </button>
+
+            <!-- Trash View Toggle Button -->
+            <button id="btn-view-trash" onclick="toggleTrashView()" title="View Trash Bin" class="px-3 py-1.5 text-xs font-semibold bg-slate-50 text-slate-600 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition flex items-center gap-1.5 border border-slate-200">
+              <i class="fa-regular fa-trash-can text-rose-500"></i>
+              <span>Trash</span>
+              <span id="trash-badge-count" class="hidden text-[10px] px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-700 font-bold">0</span>
+            </button>
+
+            <!-- Multi-Select Toggle Button -->
+            <button id="btn-toggle-select-all" onclick="toggleSelectAllFiles()" title="Select all visible files" class="px-3 py-1.5 text-xs font-semibold bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg transition flex items-center gap-1.5 border border-slate-200">
+              <i id="select-all-icon" class="fa-regular fa-square-check"></i>
+              <span id="select-all-text">Select</span>
+            </button>
+
+            <!-- New Folder Button -->
+            <button onclick="openCreateFolderModal()" class="px-3 py-1.5 text-xs font-semibold bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition flex items-center gap-1.5">
+              <i class="fa-solid fa-folder-plus"></i>
+              <span>New Folder</span>
+            </button>
+
             <!-- Refresh Button -->
-            <button onclick="loadUserFiles()" title="Refresh files" class="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition text-xs">
+            <button onclick="refreshDashboardData()" title="Refresh files & folders" class="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition text-xs">
               <i class="fa-solid fa-rotate"></i>
             </button>
           </div>
@@ -429,6 +472,62 @@
 
         <!-- Files Content Area -->
         <div class="p-5">
+          <!-- Breadcrumbs & Navigation -->
+          <div id="breadcrumbs-container" class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100 text-xs min-h-[36px]">
+            <!-- Normal Breadcrumb Navigation -->
+            <div id="normal-breadcrumbs" class="flex items-center justify-between w-full">
+              <div class="flex items-center gap-2 text-slate-600 font-medium">
+                <button onclick="navigateToFolder('root')" class="hover:text-indigo-600 flex items-center gap-1.5 transition font-semibold">
+                  <i class="fa-solid fa-house text-slate-400"></i>
+                  <span>Home</span>
+                </button>
+                <span id="breadcrumb-separator" class="hidden text-slate-300">/</span>
+                <span id="breadcrumb-current-folder" class="hidden font-bold text-slate-800 flex items-center gap-1.5">
+                  <i id="breadcrumb-folder-icon" class="fa-solid fa-folder text-indigo-500"></i>
+                  <span id="breadcrumb-folder-name"></span>
+                </span>
+              </div>
+              <div id="folder-actions-bar" class="hidden flex items-center gap-2">
+                <button onclick="openRenameCurrentFolderModal()" title="Rename this folder" class="text-xs text-slate-500 hover:text-indigo-600 px-2.5 py-1 rounded-lg hover:bg-slate-100 transition flex items-center gap-1">
+                  <i class="fa-regular fa-pen-to-square"></i>
+                  <span>Rename</span>
+                </button>
+                <button onclick="confirmDeleteCurrentFolder()" title="Delete folder (files move to Home)" class="text-xs text-slate-400 hover:text-rose-600 px-2.5 py-1 rounded-lg hover:bg-rose-50 transition flex items-center gap-1">
+                  <i class="fa-regular fa-trash-can"></i>
+                  <span>Delete</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Trash View Navigation Bar -->
+            <div id="trash-header-bar" class="hidden flex items-center justify-between w-full">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                <span class="font-bold text-rose-700 text-xs">Trash Bin (Deleted items can be restored or purged)</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button onclick="handleEmptyTrash()" class="px-2.5 py-1 text-xs font-semibold bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg transition flex items-center gap-1">
+                  <i class="fa-regular fa-trash-can"></i>
+                  <span>Empty Trash</span>
+                </button>
+                <button onclick="toggleTrashView(false)" class="px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg transition flex items-center gap-1">
+                  <i class="fa-solid fa-arrow-left"></i>
+                  <span>Back to Files</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Folders Section (Rendered when at root) -->
+          <div id="folders-section" class="hidden mb-6">
+            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+              <i class="fa-solid fa-folder text-indigo-400"></i> Folders
+            </h4>
+            <div id="folders-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
           <!-- Loading State -->
           <div id="files-loading" class="py-12 text-center text-slate-400">
             <i class="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-500 mb-2"></i>
@@ -463,6 +562,39 @@
     </footer>
 
   </section>
+
+  <!-- FLOATING BATCH ACTION BAR -->
+  <div id="batch-action-bar" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 text-white rounded-2xl shadow-2xl px-5 py-3 flex items-center gap-3 sm:gap-4 border border-slate-700/80 backdrop-blur-md fade-in max-w-xl w-[92%] sm:w-auto">
+    <div class="flex items-center gap-2 border-r border-slate-700 pr-3 shrink-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+      <span id="batch-selected-count" class="text-xs font-bold text-white">0 files</span>
+    </div>
+
+    <div class="flex items-center gap-2 overflow-x-auto py-0.5">
+      <!-- Download ZIP -->
+      <button onclick="handleBatchDownloadZip()" class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition flex items-center gap-1.5 shadow-sm whitespace-nowrap">
+        <i class="fa-solid fa-file-zipper"></i>
+        <span>Download ZIP</span>
+      </button>
+
+      <!-- Move to Folder -->
+      <button onclick="handleBatchOpenMoveModal()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition flex items-center gap-1.5 border border-slate-700 whitespace-nowrap">
+        <i class="fa-solid fa-folder-tree"></i>
+        <span>Move</span>
+      </button>
+
+      <!-- Move to Trash / Delete -->
+      <button onclick="handleBatchTrashFiles()" class="px-3 py-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 text-xs font-semibold transition flex items-center gap-1.5 border border-rose-800/50 whitespace-nowrap">
+        <i class="fa-regular fa-trash-can"></i>
+        <span>Trash</span>
+      </button>
+
+      <!-- Deselect All -->
+      <button onclick="clearSelectedFiles()" title="Clear selection" class="w-8 h-8 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center transition shrink-0">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+  </div>
 
   <!-- MODAL: User Profile / Details -->
   <div id="modal-profile" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm fade-in">
@@ -517,6 +649,10 @@
           <span id="preview-filesize" class="text-xs text-slate-400 font-normal"></span>
         </div>
         <div class="flex items-center gap-2">
+          <button id="preview-share-btn" onclick="openShareFromPreview()" class="px-3 py-1.5 text-xs font-semibold bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition flex items-center gap-1.5">
+            <i class="fa-solid fa-share-nodes"></i>
+            <span>Share</span>
+          </button>
           <a id="preview-download-btn" href="#" download class="px-3 py-1.5 text-xs font-semibold bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition flex items-center gap-1.5">
             <i class="fa-solid fa-download"></i>
             <span>Download</span>
@@ -530,6 +666,224 @@
       <!-- Preview Body -->
       <div id="preview-content-area" class="flex-1 p-6 overflow-auto bg-slate-900/5 flex items-center justify-center min-h-[300px]">
         <!-- Image, text or fallback preview inserted dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Share File -->
+  <div id="modal-share" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm fade-in">
+    <div class="bg-white w-full max-w-lg rounded-2xl border border-slate-100 shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+      <!-- Modal Header -->
+      <div class="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm">
+            <i class="fa-solid fa-share-nodes"></i>
+          </div>
+          <div class="overflow-hidden">
+            <h3 class="font-bold text-slate-800 text-sm">Share File</h3>
+            <p id="share-modal-filename" class="text-xs text-slate-400 truncate max-w-xs font-mono">filename.ext</p>
+          </div>
+        </div>
+        <button onclick="closeShareModal()" class="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center text-sm transition">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-6 overflow-y-auto space-y-5">
+        
+        <!-- Options Form -->
+        <div class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- Expiration -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">
+                <i class="fa-regular fa-clock text-indigo-500 mr-1"></i> Link Expiry
+              </label>
+              <select id="share-expiry-select" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="3600">1 Hour</option>
+                <option value="86400" selected>24 Hours (1 Day)</option>
+                <option value="259200">3 Days</option>
+                <option value="604800">7 Days</option>
+                <option value="0">Never Expires</option>
+              </select>
+            </div>
+
+            <!-- Max Downloads -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">
+                <i class="fa-solid fa-fire-flame-curved text-amber-500 mr-1"></i> Download Limit
+              </label>
+              <select id="share-downloads-select" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="0" selected>Unlimited</option>
+                <option value="1">1 Download (Burn after read)</option>
+                <option value="5">5 Downloads</option>
+                <option value="10">10 Downloads</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Password Protection Toggle -->
+          <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+            <div class="flex items-center justify-between">
+              <label for="share-password-toggle" class="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                <input type="checkbox" id="share-password-toggle" onchange="toggleSharePasswordInput()" class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300">
+                <span><i class="fa-solid fa-lock text-slate-400 mr-1"></i> Protect with Password</span>
+              </label>
+              <span class="text-[10px] text-slate-400">Optional</span>
+            </div>
+            <div id="share-password-input-group" class="hidden pt-1">
+              <input type="password" id="share-password-input" placeholder="Set a password for recipients" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+          </div>
+
+          <!-- Generate Button -->
+          <button id="btn-create-share" onclick="handleCreateShareLink()" class="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs shadow-md shadow-indigo-500/20 transition flex items-center justify-center gap-2">
+            <i class="fa-solid fa-link"></i>
+            <span>Create Secure Link</span>
+          </button>
+        </div>
+
+        <!-- Newly Generated Link Display -->
+        <div id="share-result-container" class="hidden p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 fade-in">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-1.5">
+              <i class="fa-solid fa-circle-check"></i> Link Ready!
+            </span>
+            <span id="share-result-badges" class="text-[10px] text-emerald-600 font-medium"></span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <input type="text" id="share-result-url" readonly class="flex-1 px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs font-mono text-slate-700 select-all focus:outline-none">
+            <button onclick="copyGeneratedShareLink()" id="btn-copy-share" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition flex items-center gap-1 shadow-sm whitespace-nowrap">
+              <i class="fa-regular fa-copy"></i>
+              <span id="copy-btn-text">Copy</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Active Shares for this file -->
+        <div class="pt-2 border-t border-slate-100">
+          <div class="flex items-center justify-between mb-2.5">
+            <h4 class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <i class="fa-solid fa-list-check text-slate-400"></i> Active Links for this file
+            </h4>
+            <span id="active-shares-count" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">0</span>
+          </div>
+          <div id="active-shares-list" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+            <div class="text-center py-4 text-slate-400 text-xs">No active links yet</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Create Folder -->
+  <div id="modal-folder-create" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm fade-in">
+    <div class="bg-white w-full max-w-md rounded-2xl border border-slate-100 shadow-2xl overflow-hidden">
+      <div class="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+          <i class="fa-solid fa-folder-plus text-indigo-600"></i>
+          <span>Create New Folder</span>
+        </h3>
+        <button onclick="closeCreateFolderModal()" class="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center text-sm transition">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form onsubmit="event.preventDefault(); handleCreateFolder();" class="p-6 space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5">Folder Name</label>
+          <input type="text" id="input-folder-name" placeholder="e.g. Invoices, Photos, Work..." required maxlength="50" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-2">Folder Color</label>
+          <div class="flex items-center gap-3">
+            <label class="cursor-pointer">
+              <input type="radio" name="folder-color" value="indigo" checked class="hidden peer" />
+              <div class="w-7 h-7 rounded-full bg-indigo-500 peer-checked:ring-4 peer-checked:ring-indigo-200 transition"></div>
+            </label>
+            <label class="cursor-pointer">
+              <input type="radio" name="folder-color" value="emerald" class="hidden peer" />
+              <div class="w-7 h-7 rounded-full bg-emerald-500 peer-checked:ring-4 peer-checked:ring-emerald-200 transition"></div>
+            </label>
+            <label class="cursor-pointer">
+              <input type="radio" name="folder-color" value="amber" class="hidden peer" />
+              <div class="w-7 h-7 rounded-full bg-amber-500 peer-checked:ring-4 peer-checked:ring-amber-200 transition"></div>
+            </label>
+            <label class="cursor-pointer">
+              <input type="radio" name="folder-color" value="rose" class="hidden peer" />
+              <div class="w-7 h-7 rounded-full bg-rose-500 peer-checked:ring-4 peer-checked:ring-rose-200 transition"></div>
+            </label>
+            <label class="cursor-pointer">
+              <input type="radio" name="folder-color" value="purple" class="hidden peer" />
+              <div class="w-7 h-7 rounded-full bg-purple-500 peer-checked:ring-4 peer-checked:ring-purple-200 transition"></div>
+            </label>
+            <label class="cursor-pointer">
+              <input type="radio" name="folder-color" value="blue" class="hidden peer" />
+              <div class="w-7 h-7 rounded-full bg-blue-500 peer-checked:ring-4 peer-checked:ring-blue-200 transition"></div>
+            </label>
+          </div>
+        </div>
+
+        <div class="pt-2 flex justify-end gap-2">
+          <button type="button" onclick="closeCreateFolderModal()" class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition">Cancel</button>
+          <button type="submit" id="btn-save-folder" class="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition">Create Folder</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Rename Folder -->
+  <div id="modal-folder-rename" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm fade-in">
+    <div class="bg-white w-full max-w-md rounded-2xl border border-slate-100 shadow-2xl overflow-hidden">
+      <div class="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+          <i class="fa-regular fa-pen-to-square text-indigo-600"></i>
+          <span>Rename Folder</span>
+        </h3>
+        <button onclick="closeRenameFolderModal()" class="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center text-sm transition">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form onsubmit="event.preventDefault(); handleRenameFolder();" class="p-6 space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1.5">New Folder Name</label>
+          <input type="text" id="input-rename-folder-name" required maxlength="50" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition" />
+        </div>
+
+        <div class="pt-2 flex justify-end gap-2">
+          <button type="button" onclick="closeRenameFolderModal()" class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition">Save Name</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Move File -->
+  <div id="modal-file-move" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm fade-in">
+    <div class="bg-white w-full max-w-md rounded-2xl border border-slate-100 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+      <div class="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+            <i class="fa-solid fa-arrow-right-to-bracket text-indigo-600"></i>
+            <span>Move File</span>
+          </h3>
+          <p id="move-file-name" class="text-xs text-slate-400 truncate max-w-xs mt-0.5 font-mono">filename.ext</p>
+        </div>
+        <button onclick="closeMoveModal()" class="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center text-sm transition">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="p-4 flex-1 overflow-y-auto space-y-2" id="move-folder-options">
+        <!-- Dynamically rendered list of destination folders -->
+      </div>
+
+      <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+        <button onclick="closeMoveModal()" class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition">Cancel</button>
       </div>
     </div>
   </div>
