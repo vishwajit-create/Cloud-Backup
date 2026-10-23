@@ -76,13 +76,21 @@ async function requestOtp(type, value, optionalLinkedValue = '') {
 }
 
 /**
- * Verify OTP and authenticate user
+ * Verify OTP and authenticate user (Optimized with Redis Pipelining)
  */
 async function verifyOtp(type, value, code, extraDetails = {}) {
   const normalized = normalizeIdentifier(type, value);
   const otpKey = `otp:${type}:${normalized}`;
+  const indexKey = `user:by_${type}:${normalized}`;
 
-  const storedOtp = await redis.get(otpKey);
+  // STEP 1: Single pipelined roundtrip to fetch OTP and existing user index simultaneously
+  const pipeline1 = redis.pipeline();
+  pipeline1.get(otpKey);
+  pipeline1.get(indexKey);
+  const results1 = await pipeline1.exec();
+
+  const storedOtp = results1[0][1];
+  const existingUserId = results1[1][1];
 
   if (!storedOtp) {
     throw new Error('OTP has expired or was not requested. Please request a new OTP.');
@@ -92,22 +100,21 @@ async function verifyOtp(type, value, code, extraDetails = {}) {
     throw new Error('Invalid verification code. Please check and try again.');
   }
 
-  // OTP verified, remove it
-  await redis.del(otpKey);
-
-  // Resolve or create user
-  let userId;
-  const indexKey = `user:by_${type}:${normalized}`;
-  userId = await redis.get(indexKey);
-
+  // STEP 2: Prepare session & user payload
+  const token = 'sess_' + uuidv4().replace(/-/g, '');
+  const now = new Date().toISOString();
+  let userId = existingUserId;
   let isNewUser = false;
+  let userData = {};
+
+  const pipeline2 = redis.pipeline();
+  pipeline2.del(otpKey); // Delete consumed OTP immediately
+
   if (!userId) {
     userId = 'usr_' + uuidv4().replace(/-/g, '').slice(0, 16);
     isNewUser = true;
-    await redis.set(indexKey, userId);
 
-    const now = new Date().toISOString();
-    const userData = {
+    userData = {
       id: userId,
       email: type === 'email' ? normalized : (extraDetails.email ? normalizeIdentifier('email', extraDetails.email) : ''),
       mobile: type === 'mobile' ? normalized : (extraDetails.mobile ? normalizeIdentifier('mobile', extraDetails.mobile) : ''),
@@ -116,41 +123,46 @@ async function verifyOtp(type, value, code, extraDetails = {}) {
       lastLogin: now
     };
 
-    // Index the other field if provided
-    if (userData.email && type !== 'email') {
-      await redis.set(`user:by_email:${userData.email}`, userId);
-    }
-    if (userData.mobile && type !== 'mobile') {
-      await redis.set(`user:by_mobile:${userData.mobile}`, userId);
-    }
-
-    await redis.hset(`user:${userId}`, userData);
+    pipeline2.set(indexKey, userId);
+    if (userData.email) pipeline2.set(`user:by_email:${userData.email}`, userId);
+    if (userData.mobile) pipeline2.set(`user:by_mobile:${userData.mobile}`, userId);
+    pipeline2.hset(`user:${userId}`, userData);
   } else {
-    // Existing user: update last login and optional extra details if missing
-    const userUpdates = {
-      lastLogin: new Date().toISOString()
-    };
+    // Existing user: update last login and optional details
+    const updates = { lastLogin: now };
     if (extraDetails.email) {
-      userUpdates.email = normalizeIdentifier('email', extraDetails.email);
-      await redis.set(`user:by_email:${userUpdates.email}`, userId);
+      const cleanEmail = normalizeIdentifier('email', extraDetails.email);
+      updates.email = cleanEmail;
+      pipeline2.set(`user:by_email:${cleanEmail}`, userId);
     }
     if (extraDetails.mobile) {
-      userUpdates.mobile = normalizeIdentifier('mobile', extraDetails.mobile);
-      await redis.set(`user:by_mobile:${userUpdates.mobile}`, userId);
+      const cleanMobile = normalizeIdentifier('mobile', extraDetails.mobile);
+      updates.mobile = cleanMobile;
+      pipeline2.set(`user:by_mobile:${cleanMobile}`, userId);
     }
-    await redis.hset(`user:${userId}`, userUpdates);
+    pipeline2.hset(`user:${userId}`, updates);
+    pipeline2.hgetall(`user:${userId}`); // Retrieve full profile in the same pipeline!
   }
 
-  // Generate session token
-  const token = 'sess_' + uuidv4().replace(/-/g, '');
-  await redis.set(`session:${token}`, userId, 'EX', SESSION_TTL);
+  // Store active session token with TTL
+  pipeline2.set(`session:${token}`, userId, 'EX', SESSION_TTL);
 
-  const user = await redis.hgetall(`user:${userId}`);
+  // STEP 3: Execute all writes & fetch in ONE single atomic pipelined roundtrip
+  const results2 = await pipeline2.exec();
+
+  let finalUser;
+  if (isNewUser) {
+    finalUser = userData;
+  } else {
+    // Extract hgetall result from pipeline
+    const hgetallEntry = results2.find(r => r[1] && typeof r[1] === 'object' && r[1].id);
+    finalUser = hgetallEntry ? hgetallEntry[1] : await redis.hgetall(`user:${userId}`);
+  }
 
   return {
     success: true,
     token,
-    user,
+    user: finalUser,
     isNewUser
   };
 }

@@ -11,13 +11,15 @@ if (REDIS_URL && REDIS_URL.trim() !== '') {
     tls: {
       rejectUnauthorized: false
     },
+    enableReadyCheck: false, // Eliminates slow INFO roundtrip on connection
+    noDelay: true,           // Disables TCP buffering (Nagle's algorithm) for instant packet delivery
+    keepAlive: 15000,        // Maintains TLS socket connection
     retryStrategy(times) {
-      const delay = Math.min(times * 200, 3000);
+      const delay = Math.min(times * 100, 2000);
       return delay;
     },
-    maxRetriesPerRequest: 5,
-    enableReadyCheck: true,
-    connectTimeout: 15000
+    maxRetriesPerRequest: 3,
+    connectTimeout: 8000
   });
 
   redis.on('connect', () => {
